@@ -205,6 +205,7 @@ if __name__ == "__main__":
         sys.exit(1)
     main()
 
+# Cleanup!
 country_reader.close()
 city_reader.close()
 asn_reader.close()
