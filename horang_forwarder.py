@@ -2,6 +2,7 @@
 #
 # Copyright (c) 2024 Dave Jang
 #
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -19,12 +20,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-#
+# Some code contribution by N. Karim
 
 import os
 import time
 import sys
 import json
+import geoip2.database
 from modules.json_convert import validate_file_csv
 from modules.json_convert import validate_file_json
 from modules.json_convert import validate_file_gz
@@ -40,7 +42,18 @@ from modules.forwarder_arg import Locator
 
 DEBUG_FLAG = False
 
-## horang forwarder ##
+## Geo-IP database enrichment ##
+## Esnure you have already downloaded the MaxMind Geo-IP databases!
+# Path to geo-ip database files
+country_db_path = './geoip/GeoLite2-Country.mmdb'
+city_db_path = './geoip/GeoLite2-City.mmdb'
+asn_db_path = './geoip/GeoLite2-ASN.mmdb'
+
+country_reader = geoip2.database.Reader(country_db_path)
+city_reader = geoip2.database.Reader(city_db_path)
+asn_reader = geoip2.database.Reader(asn_db_path)
+
+## Begin horang-forwarder ##
 
 def load_data(filepath, pointer):
     """
@@ -141,6 +154,27 @@ def monitor_directory(locator=None):
         print(f'[ERROR] Closing out... due to {err}')
         sys.exit(1)
 
+# Begin geo-ip log enrichment
+def enrich_log(log):
+    ip_address = log.get('ip')  # Assuming logs have an 'ip' field
+    if ip_address:
+        try:
+            country_response = country_reader.country(ip_address)
+            city_response = city_reader.city(ip_address)
+            asn_response = asn_reader.asn(ip_address)
+
+            log['country'] = country_response.country.name
+            log['city'] = city_response.city.name
+            log['asn'] = asn_response.autonomous_system_organization
+            log['asn_number'] = asn_response.autonomous_system_number
+
+        except geoip2.errors.AddressNotFoundError:
+            log['country'] = 'Unknown'
+            log['city'] = 'Unknown'
+            log['asn'] = 'Unknown'
+            log['asn_number'] = 'Unknown'
+
+    return log
 
 def main():
     '''
@@ -170,3 +204,7 @@ if __name__ == "__main__":
     if validate_args() == False:
         sys.exit(1)
     main()
+
+country_reader.close()
+city_reader.close()
+asn_reader.close()
